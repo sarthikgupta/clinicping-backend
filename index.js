@@ -28,4 +28,6 @@ app.listen(PORT, () => {
   console.log(`ClinicPing API running on port ${PORT}`);
   const { startFollowUpScheduler } = require('./services/scheduler');
   startFollowUpScheduler();
+  const { startKeepAlive } = require('./services/keepalive');
+  startKeepAlive();
 });
