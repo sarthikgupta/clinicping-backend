@@ -23,7 +23,6 @@ router.get('/', async (req, res) => {
 });
 
 // ── POST /api/followups ──────────────────────────────────────────────────────
-// Schedule a follow-up
 router.post('/', async (req, res) => {
   const clinicId = req.clinic.id;
   const { patient_id, token_id, type, scheduled_at, appointment_date, appointment_time } = req.body;
@@ -32,7 +31,6 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'patient_id, type, scheduled_at required' });
   }
 
-  // Build message content (stored for reference/custom types)
   let message = type;
   if (type === 'appointment' && appointment_date) {
     message = JSON.stringify({ date: appointment_date, time: appointment_time || '' });
@@ -57,11 +55,11 @@ router.post('/', async (req, res) => {
 });
 
 // ── POST /api/followups/:id/send-now ─────────────────────────────────────────
-// Send immediately instead of waiting for scheduler
 router.post('/:id/send-now', async (req, res) => {
   const clinicId = req.clinic.id;
   const { id } = req.params;
 
+  // Get follow-up with patient
   const { data: fu, error } = await supabase
     .from('followups')
     .select(`*, patients(id, name, phone)`)
@@ -71,48 +69,131 @@ router.post('/:id/send-now', async (req, res) => {
 
   if (error || !fu) return res.status(404).json({ error: 'Follow-up not found' });
 
+  // Get clinic info — address and phone
   const { data: clinic } = await supabase
     .from('clinics')
-    .select('doctor_name, name, phone')
+    .select('name, phone, clinic_address, city')
     .eq('id', clinicId)
     .single();
 
   const patient = fu.patients;
+
+  if (!patient?.phone || !patient.phone.trim()) {
+    return res.status(400).json({ error: 'Patient has no phone number' });
+  }
+
+  // Get actual treating doctor from clinic_users
+  const doctorName = await getTreatingDoctorName(fu.patient_id, clinicId, clinic?.name || '');
+  const clinicPhone = clinic?.phone || '';
+  const clinicAddress = clinic?.clinic_address || clinic?.city || '';
+  const clinicName = clinic?.name || '';
+
   let result = { success: false };
 
   try {
     switch (fu.type) {
       case 'medicine':
-        result = await wa.sendMedicineReminder({ patient, doctorName: clinic.doctor_name, clinicPhone: clinic.phone, clinicId });
+        result = await wa.sendMedicineReminder({
+          patient,
+          doctorName,
+          clinicPhone,
+          clinicId,
+        });
         break;
-      case 'appointment':
-        const d = safeJSON(fu.message);
-        result = await wa.sendAppointmentReminder({ patient, appointmentDate: d.date || '', appointmentTime: d.time || '', doctorName: clinic.doctor_name, clinicId });
+
+      case 'appointment': {
+        const apptData = safeJSON(fu.message);
+        const apptDate = apptData.date
+          ? new Date(apptData.date).toLocaleDateString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: 'numeric', month: 'long', year: 'numeric'
+            })
+          : '';
+        const apptTime = apptData.time || '';
+        result = await wa.sendAppointmentReminder({
+          patient,
+          appointmentDate: apptDate,
+          appointmentTime: apptTime,
+          doctorName,
+          clinicAddress,
+          clinicPhone,
+          clinicId,
+        });
         break;
+      }
+
       case 'lab':
-        result = await wa.sendLabReminder({ patient, doctorName: clinic.doctor_name, clinicName: clinic.name, clinicId });
+        result = await wa.sendLabReminder({
+          patient,
+          doctorName,
+          clinicName,
+          clinicPhone,
+          clinicId,
+        });
         break;
+
       case 'wellness':
-        result = await wa.sendWellnessCheck({ patient, doctorName: clinic.doctor_name, clinicId });
+        result = await wa.sendWellnessCheck({
+          patient,
+          doctorName,
+          clinicPhone,
+          clinicId,
+        });
         break;
     }
 
     await supabase
       .from('followups')
-      .update({ status: result.success ? 'sent' : 'failed', sent_at: result.success ? new Date().toISOString() : null })
+      .update({
+        status: result.success ? 'sent' : 'failed',
+        sent_at: result.success ? new Date().toISOString() : null,
+      })
       .eq('id', id);
 
-    res.json({ success: result.success, followup: fu });
+    res.json({ success: result.success });
   } catch (err) {
+    console.error('[Followups] send-now error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ── DELETE /api/followups/:id ────────────────────────────────────────────────
 router.delete('/:id', async (req, res) => {
-  await supabase.from('followups').update({ status: 'cancelled' }).eq('id', req.params.id).eq('clinic_id', req.clinic.id);
+  await supabase
+    .from('followups')
+    .update({ status: 'cancelled' })
+    .eq('id', req.params.id)
+    .eq('clinic_id', req.clinic.id);
   res.json({ message: 'Cancelled' });
 });
+
+// ── Get actual treating doctor from clinic_users ──────────────────────────────
+async function getTreatingDoctorName(patientId, clinicId, fallback) {
+  try {
+    // Find most recent queue token for this patient → get doctor_id
+    const { data: token } = await supabase
+      .from('queue_tokens')
+      .select('doctor_id')
+      .eq('clinic_id', clinicId)
+      .eq('patient_id', patientId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!token?.doctor_id) return fallback;
+
+    // Get doctor name from clinic_users
+    const { data: doctor } = await supabase
+      .from('clinic_users')
+      .select('name')
+      .eq('id', token.doctor_id)
+      .single();
+
+    return doctor?.name || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 function safeJSON(str) {
   try { return JSON.parse(str); } catch { return {}; }
