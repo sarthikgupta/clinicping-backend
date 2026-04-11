@@ -34,9 +34,9 @@ function startFollowUpScheduler() {
     for (const fu of followups) {
       const patient = fu.patients;
       const clinic = fu.clinics;
+
       if (!patient || !clinic) continue;
       if (!patient.phone || !patient.phone.trim()) {
-        // No phone — mark as failed silently
         await supabase.from('followups').update({ status: 'failed' }).eq('id', fu.id);
         continue;
       }
@@ -44,12 +44,14 @@ function startFollowUpScheduler() {
       let result = { success: false };
 
       try {
-        // ── Get actual treating doctor for this patient ────────────────────
+        // Get actual treating doctor
         const doctorName = await getTreatingDoctorName(fu.patient_id, fu.clinic_id, clinic.name);
-        const clinicAddress = clinic.clinic_address || clinic.city || '';
         const clinicPhone = clinic.phone || '';
+        const clinicAddress = clinic.clinic_address || clinic.city || '';
+        const clinicName = clinic.name || '';
 
         switch (fu.type) {
+
           case 'medicine':
             result = await wa.sendMedicineReminder({
               patient,
@@ -67,7 +69,7 @@ function startFollowUpScheduler() {
                   day: 'numeric', month: 'long', year: 'numeric'
                 })
               : formatDate(fu.scheduled_at);
-            const apptTime = apptData.time || '10:00 AM';
+            const apptTime = apptData.time || '';
 
             result = await wa.sendAppointmentReminder({
               patient,
@@ -85,7 +87,7 @@ function startFollowUpScheduler() {
             result = await wa.sendLabReminder({
               patient,
               doctorName,
-              clinicName: clinic.name,
+              clinicName,
               clinicPhone,
               clinicId: clinic.id,
             });
@@ -95,6 +97,7 @@ function startFollowUpScheduler() {
             result = await wa.sendWellnessCheck({
               patient,
               doctorName,
+              clinicPhone,
               clinicId: clinic.id,
             });
             break;
@@ -108,10 +111,10 @@ function startFollowUpScheduler() {
           })
           .eq('id', fu.id);
 
-        console.log(`[Scheduler] Follow-up ${fu.id} (${fu.type}) → ${result.success ? 'sent ✓' : 'failed ✗'}`);
+        console.log(`[Scheduler] ${fu.type} → ${patient.name} → ${result.success ? '✓ sent' : '✗ failed'}`);
 
       } catch (err) {
-        console.error(`[Scheduler] Failed to send follow-up ${fu.id}:`, err.message);
+        console.error(`[Scheduler] Failed ${fu.id}:`, err.message);
         await supabase.from('followups').update({ status: 'failed' }).eq('id', fu.id);
       }
     }
@@ -120,10 +123,9 @@ function startFollowUpScheduler() {
   console.log('[Scheduler] Follow-up scheduler started (every 5 min)');
 }
 
-// ── Get the actual doctor who treated this patient ────────────────────────────
-async function getTreatingDoctorName(patientId, clinicId, fallbackName) {
+// Get actual treating doctor name from clinic_users
+async function getTreatingDoctorName(patientId, clinicId, fallback) {
   try {
-    // Find most recent queue token for this patient → get doctor_id
     const { data: token } = await supabase
       .from('queue_tokens')
       .select('doctor_id')
@@ -133,22 +135,20 @@ async function getTreatingDoctorName(patientId, clinicId, fallbackName) {
       .limit(1)
       .single();
 
-    if (!token?.doctor_id) return fallbackName;
+    if (!token?.doctor_id) return fallback;
 
-    // Fetch doctor name from clinic_users
     const { data: doctor } = await supabase
       .from('clinic_users')
       .select('name')
       .eq('id', token.doctor_id)
       .single();
 
-    return doctor?.name || fallbackName;
+    return doctor?.name || fallback;
   } catch {
-    return fallbackName;
+    return fallback;
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function safeParseJSON(str) {
   try { return JSON.parse(str); } catch { return {}; }
 }
