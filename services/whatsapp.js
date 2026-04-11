@@ -32,7 +32,7 @@ async function sendWhatsAppTemplate(phone, templateName, params, clinicId) {
   try {
     const response = await axios.post(INTERAKT_BASE, payload, {
       headers: {
-        Authorization: `Basic ${Buffer.from(process.env.INTERAKT_API_KEY + ':').toString('base64')}`,
+        Authorization: `Basic ${Buffer.from('token:' + process.env.INTERAKT_API_KEY).toString('base64')}`,
         'Content-Type': 'application/json',
       },
       timeout: 8000,
