@@ -101,7 +101,7 @@ router.get('/dashboard', async (req, res) => {
         .from('clinic_users')
         .select('id, name, role')
         .eq('clinic_id', clinicId)
-        .in('role', ['doctor', 'admin'])
+        .in('role', ['doctor'])
         .eq('is_active', true);
 
       if (allDoctors && allDoctors.length > 0) {
