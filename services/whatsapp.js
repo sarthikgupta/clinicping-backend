@@ -123,7 +123,7 @@ async function sendPrescription({ patient, consultation, doctorName, clinicPhone
         const doseStr = m.dose || '';
         const durStr = m.duration ? `(${m.duration})` : '';
         return `${i + 1}. ${m.name} — ${doseStr} ${durStr}`.trim();
-      }).join('\n')
+      }).join(' | ')
     : 'Doctor se poochhen';
 
   // Format tests
