@@ -58,6 +58,8 @@ function startFollowUpScheduler() {
               appointmentDate: apptData.date || 'scheduled date',
               appointmentTime: apptData.time || 'scheduled time',
               doctorName: clinic.doctor_name,
+              clinicAddress: clinic.clinic_address || clinic.city || '',
+              clinicPhone: clinic.phone || '',
               clinicId: clinic.id,
             });
             break;
