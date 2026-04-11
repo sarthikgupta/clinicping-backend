@@ -9,7 +9,7 @@ const TEMPLATES = {
   medicine_reminder:    { name: 'clinicping_medicine_reminder' },
   appointment_reminder: { name: 'clinicping_appointment_reminder' },
   lab_reminder:         { name: 'clinicping_lab_reminder' },
-  wellness_check:       { name: 'clinicping_wellness_check' },
+  wellness_check:       { name: 'clinicping_wellness_chk' },
   prescription:         { name: 'clinicping_prescription' },
 };
 
