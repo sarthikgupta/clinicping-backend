@@ -83,7 +83,7 @@ async function sendMedicineReminder({ patient, doctorName, clinicPhone, clinicId
 
 async function sendAppointmentReminder({ patient, appointmentDate, appointmentTime, doctorName, clinicAddress, clinicPhone, clinicId }) {
   return sendWhatsAppTemplate(patient.phone, TEMPLATES.appointment_reminder.name,
-    [patient.name, appointmentDate, appointmentTime, doctorName, clinicAddress || '', clinicPhone || '',], clinicId);
+    [patient.name, appointmentDate, appointmentTime, doctorName, clinicAddress, clinicPhone], clinicId);
 }
 
 async function sendLabReminder({ patient, doctorName, clinicName, clinicId }) {
