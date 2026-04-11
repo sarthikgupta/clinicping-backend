@@ -86,6 +86,7 @@ function startFollowUpScheduler() {
               patient,
               doctorName,
               clinicName: clinic.name,
+              clinicPhone,
               clinicId: clinic.id,
             });
             break;

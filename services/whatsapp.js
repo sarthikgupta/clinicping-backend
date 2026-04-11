@@ -86,9 +86,9 @@ async function sendAppointmentReminder({ patient, appointmentDate, appointmentTi
     [patient.name, appointmentDate, appointmentTime, doctorName, clinicAddress, clinicPhone], clinicId);
 }
 
-async function sendLabReminder({ patient, doctorName, clinicName, clinicId }) {
+async function sendLabReminder({ patient, doctorName, clinicName,clinicPhone, clinicId }) {
   return sendWhatsAppTemplate(patient.phone, TEMPLATES.lab_reminder.name,
-    [patient.name, doctorName, clinicName], clinicId);
+    [patient.name, doctorName, clinicName,clinicPhone], clinicId);
 }
 
 async function sendWellnessCheck({ patient, doctorName, clinicId }) {
