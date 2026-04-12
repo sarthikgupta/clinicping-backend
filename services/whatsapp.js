@@ -38,13 +38,15 @@ async function sendWhatsAppTemplate(phone, templateName, params, clinicId) {
       timeout: 8000,
     });
 
-    await supabase.from('whatsapp_logs').insert({
-      clinic_id: clinicId,
-      patient_phone: formattedPhone,
-      message_type: templateName,
-      message_body: JSON.stringify(params),
-      status: 'sent',
-    }).catch(() => {});
+    try {
+      await supabase.from('whatsapp_logs').insert({
+        clinic_id: clinicId,
+        patient_phone: formattedPhone,
+        message_type: templateName,
+        message_body: JSON.stringify(params),
+        status: 'sent',
+      });
+    } catch (_) {}
 
     console.log(`[WhatsApp] ${templateName} → ${formattedPhone} ✓`);
     return { success: true };
@@ -52,13 +54,15 @@ async function sendWhatsAppTemplate(phone, templateName, params, clinicId) {
     const errMsg = err.response?.data || err.message;
     console.error(`[WhatsApp] ${templateName} failed:`, JSON.stringify(errMsg));
 
-    await supabase.from('whatsapp_logs').insert({
-      clinic_id: clinicId,
-      patient_phone: formattedPhone,
-      message_type: templateName,
-      message_body: JSON.stringify(params),
-      status: 'failed',
-    }).catch(() => {});
+    try {
+      await supabase.from('whatsapp_logs').insert({
+        clinic_id: clinicId,
+        patient_phone: formattedPhone,
+        message_type: templateName,
+        message_body: JSON.stringify(params),
+        status: 'failed',
+      });
+    } catch (_) {}
 
     return { success: false, error: errMsg };
   }
