@@ -59,7 +59,6 @@ router.post('/:id/send-now', async (req, res) => {
   const clinicId = req.clinic.id;
   const { id } = req.params;
 
-  // Get follow-up with patient
   const { data: fu, error } = await supabase
     .from('followups')
     .select(`*, patients(id, name, phone)`)
@@ -69,7 +68,6 @@ router.post('/:id/send-now', async (req, res) => {
 
   if (error || !fu) return res.status(404).json({ error: 'Follow-up not found' });
 
-  // Get clinic info — address and phone
   const { data: clinic } = await supabase
     .from('clinics')
     .select('name, phone, clinic_address, city')
@@ -82,7 +80,6 @@ router.post('/:id/send-now', async (req, res) => {
     return res.status(400).json({ error: 'Patient has no phone number' });
   }
 
-  // Get actual treating doctor from clinic_users
   const doctorName = await getTreatingDoctorName(fu.patient_id, clinicId, clinic?.name || '');
   const clinicPhone = clinic?.phone || '';
   const clinicAddress = clinic?.clinic_address || clinic?.city || '';
@@ -94,26 +91,22 @@ router.post('/:id/send-now', async (req, res) => {
     switch (fu.type) {
       case 'medicine':
         result = await wa.sendMedicineReminder({
-          patient,
-          doctorName,
-          clinicPhone,
-          clinicId,
+          patient, doctorName, clinicPhone, clinicId,
         });
         break;
 
       case 'appointment': {
         const apptData = safeJSON(fu.message);
         const apptDate = apptData.date
-          ? new Date(apptData.date).toLocaleDateString('en-IN', {
+          ? new Date(apptData.date + 'T00:00:00+05:30').toLocaleDateString('en-IN', {
               timeZone: 'Asia/Kolkata',
               day: 'numeric', month: 'long', year: 'numeric'
             })
           : '';
-        const apptTime = apptData.time || '';
         result = await wa.sendAppointmentReminder({
           patient,
           appointmentDate: apptDate,
-          appointmentTime: apptTime,
+          appointmentTime: apptData.time || '',
           doctorName,
           clinicAddress,
           clinicPhone,
@@ -124,22 +117,18 @@ router.post('/:id/send-now', async (req, res) => {
 
       case 'lab':
         result = await wa.sendLabReminder({
-          patient,
-          doctorName,
-          clinicName,
-          clinicPhone,
-          clinicId,
+          patient, doctorName, clinicName, clinicPhone, clinicId,
         });
         break;
 
       case 'wellness':
         result = await wa.sendWellnessCheck({
-          patient,
-          doctorName,
-          clinicPhone,
-          clinicId,
+          patient, doctorName, clinicPhone, clinicId,
         });
         break;
+
+      default:
+        return res.status(400).json({ error: `Unknown follow-up type: ${fu.type}` });
     }
 
     await supabase
@@ -150,9 +139,11 @@ router.post('/:id/send-now', async (req, res) => {
       })
       .eq('id', id);
 
-    res.json({ success: result.success });
+    console.log(`[Followups] send-now ${fu.type} → ${patient.name} → ${result.success ? '✓' : '✗'}`);
+    res.json({ success: result.success, error: result.error });
+
   } catch (err) {
-    console.error('[Followups] send-now error:', err.message);
+    console.error('[Followups] send-now crash:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -167,10 +158,9 @@ router.delete('/:id', async (req, res) => {
   res.json({ message: 'Cancelled' });
 });
 
-// ── Get actual treating doctor from clinic_users ──────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 async function getTreatingDoctorName(patientId, clinicId, fallback) {
   try {
-    // Find most recent queue token for this patient → get doctor_id
     const { data: token } = await supabase
       .from('queue_tokens')
       .select('doctor_id')
@@ -182,7 +172,6 @@ async function getTreatingDoctorName(patientId, clinicId, fallback) {
 
     if (!token?.doctor_id) return fallback;
 
-    // Get doctor name from clinic_users
     const { data: doctor } = await supabase
       .from('clinic_users')
       .select('name')
