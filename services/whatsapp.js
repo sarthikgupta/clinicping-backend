@@ -68,7 +68,7 @@ async function sendWhatsAppTemplate(phone, campaignName, params, userName, clini
 
 // {{1}} name, {{2}} clinic name , {{3}} token, {{4}} wait minutes
 async function sendTokenAssigned({ patient, clinicName, tokenNumber, waitMinutes, clinicId }) {
-  return sendWhatsAppTemplate(patient.phone, TEMPLATES.token_assigned.name, [
+  return sendWhatsAppTemplate(patient.phone, CAMPAIGNS.token_assigned.name, [
     firstName(patient.name),
     clinicName,
     String(tokenNumber),
