@@ -6,6 +6,7 @@ function startFollowUpScheduler() {
   cron.schedule('*/5 * * * *', async () => {
     console.log('[Scheduler] Checking pending follow-ups...');
 
+    // Use IST-aware now so it matches scheduled_at stored with +05:30 offset
     const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).replace(' ', 'T') + '+05:30';
 
     const { data: followups, error } = await supabase
