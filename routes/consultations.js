@@ -179,7 +179,7 @@ router.post('/', async (req, res) => {
 
     // Schedule follow-up for next appointment
     if (next_appointment_date) {
-      const scheduledAt = new Date(`${next_appointment_date}T09:00:00`).toISOString();
+      const scheduledAt = `${next_appointment_date}T09:00:00+05:30`;
       await supabase.from('followups').insert({
         clinic_id: clinicId,
         patient_id,
@@ -201,12 +201,30 @@ router.post('/', async (req, res) => {
           .eq('id', patient_id)
           .single();
 
-        // Get clinic info for doctor name and phone
+        // Get clinic info for phone
         const { data: clinicInfo } = await supabase
           .from('clinics')
-          .select('doctor_name, phone, doctor_qualification')
+          .select('phone')
           .eq('id', clinicId)
           .single();
+
+        // Get actual treating doctor from clinic_users
+        let doctorName = 'Doctor';
+        if (token_id) {
+          const { data: token } = await supabase
+            .from('queue_tokens')
+            .select('doctor_id')
+            .eq('id', token_id)
+            .single();
+          if (token?.doctor_id) {
+            const { data: doctor } = await supabase
+              .from('clinic_users')
+              .select('name')
+              .eq('id', token.doctor_id)
+              .single();
+            if (doctor?.name) doctorName = doctor.name;
+          }
+        }
 
         if (patient?.phone && patient.phone.trim()) {
           const consultationData = {
@@ -222,7 +240,7 @@ router.post('/', async (req, res) => {
           const result = await wa.sendPrescription({
             patient,
             consultation: consultationData,
-            doctorName: clinicInfo?.doctor_name || 'Doctor',
+            doctorName,
             clinicPhone: clinicInfo?.phone || '',
             clinicId,
           });
@@ -248,7 +266,7 @@ router.post('/', async (req, res) => {
     // Update patient's last_visit date
     await supabase
     .from('patients')
-    .update({ last_visit: new Date().toISOString().split('T')[0] })
+    .update({ last_visit: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) })
     .eq('id', patient_id);
 
     res.status(201).json({ ...saved, whatsappSlipSent });
