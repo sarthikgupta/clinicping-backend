@@ -1,40 +1,36 @@
 const axios = require('axios');
 const supabase = require('../db/supabase');
 
-const INTERAKT_BASE = 'https://api.interakt.ai/v1/public/message/';
+const AISENSY_BASE = 'https://backend.aisensy.com/campaign/t1/api/v2';
 
-const TEMPLATES = {
-  token_assigned:       { name: 'clinicping_token_assigned' },
-  call_in:              { name: 'clinicping_call_in' },
-  medicine_reminder:    { name: 'clinicping_medicine_reminder' },
-  appointment_reminder: { name: 'clinicping_appointment_reminder' },
-  lab_reminder:         { name: 'clinicping_lab_reminder' },
-  wellness_check:       { name: 'clinicping_wellness_chk' },
-  prescription:         { name: 'clinicping_prescription' },
+// ── Campaign names — create these in AiSensy dashboard ────────────────────────
+// AiSensy → Campaigns → Launch Campaign → API Campaign → name it exactly as below
+const CAMPAIGNS = {
+  token_assigned:       'clinicping_token_assigned',
+  call_in:              'clinicping_call_in',
+  medicine_reminder:    'clinicping_medicine_reminder',
+  appointment_reminder: 'clinicping_appointment_reminder',
+  lab_reminder:         'clinicping_lab_reminder',
+  wellness_check:       'clinicping_wellness_chk',
+  prescription:         'clinicping_prescription',
 };
 
 // ── Core send ─────────────────────────────────────────────────────────────────
-async function sendWhatsAppTemplate(phone, templateName, params, clinicId) {
+async function sendWhatsAppTemplate(phone, campaignName, params, userName, clinicId) {
   const formattedPhone = formatPhone(phone);
 
   const payload = {
-    countryCode: '+91',
-    phoneNumber: formattedPhone,
-    callbackData: `clinicping_${clinicId}`,
-    type: 'Template',
-    template: {
-      name: templateName,
-      languageCode: 'hi',
-      bodyValues: params.map(p => clean(p)),
-    },
+    apiKey: process.env.AISENSY_API_KEY,
+    campaignName,
+    destination: formattedPhone,
+    userName: userName || 'ClinicPing User',
+    source: 'ClinicPing',
+    templateParams: params.map(p => clean(p)),
   };
 
   try {
-    const response = await axios.post(INTERAKT_BASE, payload, {
-      headers: {
-        Authorization: `Basic ${process.env.INTERAKT_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+    const response = await axios.post(AISENSY_BASE, payload, {
+      headers: { 'Content-Type': 'application/json' },
       timeout: 8000,
     });
 
@@ -42,23 +38,23 @@ async function sendWhatsAppTemplate(phone, templateName, params, clinicId) {
       await supabase.from('whatsapp_logs').insert({
         clinic_id: clinicId,
         patient_phone: formattedPhone,
-        message_type: templateName,
+        message_type: campaignName,
         message_body: JSON.stringify(params),
         status: 'sent',
       });
     } catch (_) {}
 
-    console.log(`[WhatsApp] ${templateName} → ${formattedPhone} ✓`);
+    console.log(`[WhatsApp] ${campaignName} → ${formattedPhone} ✓`);
     return { success: true };
   } catch (err) {
     const errMsg = err.response?.data || err.message;
-    console.error(`[WhatsApp] ${templateName} failed:`, JSON.stringify(errMsg));
+    console.error(`[WhatsApp] ${campaignName} failed:`, JSON.stringify(errMsg));
 
     try {
       await supabase.from('whatsapp_logs').insert({
         clinic_id: clinicId,
         patient_phone: formattedPhone,
-        message_type: templateName,
+        message_type: campaignName,
         message_body: JSON.stringify(params),
         status: 'failed',
       });
@@ -70,63 +66,63 @@ async function sendWhatsAppTemplate(phone, templateName, params, clinicId) {
 
 // ── Template senders ──────────────────────────────────────────────────────────
 
-// {{1}} name, {{2}} token, {{3}} wait minutes, {{4}} clinic name
-async function sendTokenAssigned({ patient, tokenNumber, waitMinutes, clinicName, clinicId }) {
+// {{1}} name, {{2}} clinic name , {{3}} token, {{4}} wait minutes
+async function sendTokenAssigned({ patient, clinicName, tokenNumber, waitMinutes, clinicId }) {
   return sendWhatsAppTemplate(patient.phone, TEMPLATES.token_assigned.name, [
     firstName(patient.name),
+    clinicName,
     String(tokenNumber),
     String(waitMinutes),
-    clinicName,
   ], clinicId);
 }
 
 // {{1}} name, {{2}} doctor name
 async function sendCallIn({ patient, doctorName, clinicId }) {
-  return sendWhatsAppTemplate(patient.phone, TEMPLATES.call_in.name, [
+  return sendWhatsAppTemplate(patient.phone, CAMPAIGNS.call_in, [
     firstName(patient.name),
     doctorName,
-  ], clinicId);
+  ], patient.name, clinicId);
 }
 
 // {{1}} name, {{2}} doctor name, {{3}} clinic phone
 async function sendMedicineReminder({ patient, doctorName, clinicPhone, clinicId }) {
-  return sendWhatsAppTemplate(patient.phone, TEMPLATES.medicine_reminder.name, [
+  return sendWhatsAppTemplate(patient.phone, CAMPAIGNS.medicine_reminder, [
     firstName(patient.name),
     doctorName,
     clinicPhone || '',
-  ], clinicId);
+  ], patient.name, clinicId);
 }
 
 // {{1}} name, {{2}} date, {{3}} time (Hindi), {{4}} doctor, {{5}} address, {{6}} phone
 async function sendAppointmentReminder({ patient, appointmentDate, appointmentTime, doctorName, clinicAddress, clinicPhone, clinicId }) {
   const hindiTime = toHindiTime(appointmentTime);
-  return sendWhatsAppTemplate(patient.phone, TEMPLATES.appointment_reminder.name, [
+  return sendWhatsAppTemplate(patient.phone, CAMPAIGNS.appointment_reminder, [
     firstName(patient.name),
     appointmentDate || '',
     hindiTime,
     doctorName || '',
     clinicAddress || '',
     clinicPhone || '',
-  ], clinicId);
+  ], patient.name, clinicId);
 }
 
 // {{1}} name, {{2}} doctor name, {{3}} clinic name, {{4}} clinic phone
 async function sendLabReminder({ patient, doctorName, clinicName, clinicPhone, clinicId }) {
-  return sendWhatsAppTemplate(patient.phone, TEMPLATES.lab_reminder.name, [
+  return sendWhatsAppTemplate(patient.phone, CAMPAIGNS.lab_reminder, [
     firstName(patient.name),
     doctorName || '',
     clinicName || '',
     clinicPhone || '',
-  ], clinicId);
+  ], patient.name, clinicId);
 }
 
 // {{1}} name, {{2}} doctor name, {{3}} clinic phone
 async function sendWellnessCheck({ patient, doctorName, clinicPhone, clinicId }) {
-  return sendWhatsAppTemplate(patient.phone, TEMPLATES.wellness_check.name, [
+  return sendWhatsAppTemplate(patient.phone, CAMPAIGNS.wellness_check, [
     firstName(patient.name),
     doctorName || '',
     clinicPhone || '',
-  ], clinicId);
+  ], patient.name, clinicId);
 }
 
 // Prescription slip
@@ -151,10 +147,11 @@ async function sendPrescription({ patient, consultation, doctorName, clinicPhone
 
   let apptText = 'Zaroorat padne par aayein';
   if (consultation.next_appointment_date) {
-    const apptDate = new Date(consultation.next_appointment_date).toLocaleDateString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      day: 'numeric', month: 'long', year: 'numeric'
-    });
+    const apptDate = new Date(consultation.next_appointment_date + 'T00:00:00+05:30')
+      .toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: 'numeric', month: 'long', year: 'numeric'
+      });
     const apptTime = consultation.next_appointment_time
       ? ` — ${toHindiTime(consultation.next_appointment_time)}`
       : '';
@@ -163,7 +160,7 @@ async function sendPrescription({ patient, consultation, doctorName, clinicPhone
 
   const diagnosis = consultation.diagnosis || consultation.symptoms || 'General checkup';
 
-  return sendWhatsAppTemplate(patient.phone, TEMPLATES.prescription.name, [
+  return sendWhatsAppTemplate(patient.phone, CAMPAIGNS.prescription, [
     firstName(patient.name),
     doctorName || '',
     date,
@@ -172,20 +169,22 @@ async function sendPrescription({ patient, consultation, doctorName, clinicPhone
     testsText,
     apptText,
     clinicPhone || '',
-  ], clinicId);
+  ], patient.name, clinicId);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
 function firstName(name) {
   return (name || '').split(' ')[0] || name || '';
 }
 
 function formatPhone(phone) {
-  return (phone || '').replace(/[\s\-\+]/g, '').replace(/^91/, '');
+  const digits = (phone || '').replace(/[\s\-\+]/g, '');
+  // AiSensy needs full number with country code
+  if (digits.startsWith('91') && digits.length === 12) return digits;
+  if (digits.length === 10) return '91' + digits;
+  return digits;
 }
 
-// Remove tabs, newlines, excessive spaces (Interakt requirement)
 function clean(str) {
   return String(str || '')
     .replace(/[\t\n\r]/g, ' ')
@@ -193,16 +192,10 @@ function clean(str) {
     .trim();
 }
 
-// Convert 24hr time to Hindi natural language
-// e.g. "10:00" → "subah 10 baje"
-// e.g. "14:30" → "dopahar 2:30 baje"
-// e.g. "19:00" → "sham 7 baje"
 function toHindiTime(timeStr) {
   if (!timeStr) return '';
 
-  // Handle both "HH:MM" and "HH:MM AM/PM" formats
   let hours, minutes;
-
   if (timeStr.includes('AM') || timeStr.includes('PM')) {
     const [timePart, period] = timeStr.split(' ');
     const [h, m] = timePart.split(':').map(Number);
@@ -212,18 +205,14 @@ function toHindiTime(timeStr) {
     [hours, minutes] = timeStr.split(':').map(Number);
   }
 
-  // Determine time period in Hindi
   let prefix;
   if (hours >= 5 && hours < 12) prefix = 'subah';
-  else if (hours === 12) prefix = 'dopahar';
   else if (hours >= 12 && hours < 16) prefix = 'dopahar';
   else if (hours >= 16 && hours < 19) prefix = 'sham';
   else prefix = 'raat';
 
-  // Convert to 12-hour format
   const h12 = hours % 12 || 12;
   const minStr = minutes > 0 ? `:${String(minutes).padStart(2, '0')}` : '';
-
   return `${prefix} ${h12}${minStr} baje`;
 }
 
