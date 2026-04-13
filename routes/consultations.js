@@ -8,7 +8,7 @@ router.use(auth);
 // ── GET /api/consultations/today ──────────────────────────────────────────────
 router.get('/today', async (req, res) => {
   const clinicId = req.clinic.id;
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
 
   try {
     const isDoctor = req.user.role === 'doctor';
@@ -101,7 +101,7 @@ router.post('/', async (req, res) => {
 
   if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
 
   try {
     let consultationId;
@@ -243,6 +243,13 @@ router.post('/', async (req, res) => {
         tests_ordered(name, sort_order)`)
       .eq('id', consultationId)
       .single();
+
+
+    // Update patient's last_visit date
+    await supabase
+    .from('patients')
+    .update({ last_visit: new Date().toISOString().split('T')[0] })
+    .eq('id', patient_id);
 
     res.status(201).json({ ...saved, whatsappSlipSent });
   } catch (err) {
