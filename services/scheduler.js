@@ -6,7 +6,7 @@ function startFollowUpScheduler() {
   cron.schedule('*/5 * * * *', async () => {
     console.log('[Scheduler] Checking pending follow-ups...');
 
-    const now = new Date().toISOString();
+    const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).replace(' ', 'T') + '+05:30';
 
     const { data: followups, error } = await supabase
       .from('followups')

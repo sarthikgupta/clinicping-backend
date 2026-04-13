@@ -25,7 +25,9 @@ router.get('/', async (req, res) => {
 // ── POST /api/followups ──────────────────────────────────────────────────────
 router.post('/', async (req, res) => {
   const clinicId = req.clinic.id;
-  const { patient_id, token_id, type, scheduled_at, appointment_date, appointment_time } = req.body;
+  const { patient_id, token_id, type, scheduled_at: scheduled_at.includes('+') || scheduled_at.includes('Z')
+  ? scheduled_at
+  : scheduled_at + '+05:30', appointment_date, appointment_time } = req.body;
 
   if (!patient_id || !type || !scheduled_at) {
     return res.status(400).json({ error: 'patient_id, type, scheduled_at required' });
