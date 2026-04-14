@@ -9,7 +9,7 @@ router.use(auth);
 router.get('/', async (req, res) => {
   const { data, error } = await supabase
     .from('clinics')
-    .select('name, doctor_name, doctor_qualification, doctor_registration, phone, email, city, clinic_address, clinic_timings, rx_template, rx_color, rx_footer_note, clinic_code')
+    .select('name, phone, email, city, clinic_address, clinic_timings, rx_template, rx_color, rx_footer_note, clinic_code')
     .eq('id', req.clinic.id)
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
 router.patch('/', async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
 
-  const allowed = ['name', 'doctor_name', 'doctor_qualification', 'doctor_registration', 'phone', 'city', 'clinic_address', 'clinic_timings', 'rx_template', 'rx_color', 'rx_footer_note'];
+  const allowed = ['name', 'phone', 'city', 'clinic_address', 'clinic_timings', 'rx_template', 'rx_color', 'rx_footer_note'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 
@@ -41,7 +41,7 @@ router.patch('/', async (req, res) => {
 
   const { data, error } = await supabase
     .from('clinics').update(updates).eq('id', req.clinic.id)
-    .select('name, doctor_name, doctor_qualification, doctor_registration, phone, email, city, clinic_address, clinic_timings, rx_template, rx_color, rx_footer_note, clinic_code')
+    .select('name, phone, email, city, clinic_address, clinic_timings, rx_template, rx_color, rx_footer_note, clinic_code')
     .single();
 
   if (error) return res.status(500).json({ error: error.message });

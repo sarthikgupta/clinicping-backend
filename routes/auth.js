@@ -55,7 +55,6 @@ router.post('/signup', [
       .from('clinics')
       .insert({
         name: clinic_name,
-        doctor_name: name,
         email,
         phone,
         password_hash: 'managed_by_users',
