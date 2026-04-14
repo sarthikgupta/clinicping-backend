@@ -74,6 +74,7 @@ router.get('/dashboard', async (req, res) => {
       done: todayTokens.filter(t => t.status === 'done').length,
       waiting: todayTokens.filter(t => ['waiting', 'next'].includes(t.status)).length,
       consulting: todayTokens.filter(t => t.status === 'consulting').length,
+      cancelled: todayTokens.filter(t => t.status === 'cancelled').length, 
     };
 
     // Week by day
@@ -128,6 +129,7 @@ router.get('/dashboard', async (req, res) => {
               total: drToday?.length || 0,
               done: drToday?.filter(t => t.status === 'done').length || 0,
               waiting: drToday?.filter(t => ['waiting', 'next', 'consulting'].includes(t.status)).length || 0,
+              cancelled: drToday?.filter(t => t.status === 'cancelled').length || 0,  
             },
             week: drWeek?.length || 0,
           };
