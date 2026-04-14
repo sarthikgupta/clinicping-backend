@@ -18,7 +18,7 @@ function getDoctorFilter(req) {
 // ── GET /api/queue/today ─────────────────────────────────────────────────────
 router.get('/today', async (req, res) => {
   const clinicId = req.clinic.id;
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
   const doctorFilter = getDoctorFilter(req);
 
   let query = supabase
@@ -41,7 +41,7 @@ router.get('/today', async (req, res) => {
 // ── GET /api/queue/stats ─────────────────────────────────────────────────────
 router.get('/stats', async (req, res) => {
   const clinicId = req.clinic.id;
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
   const doctorFilter = getDoctorFilter(req);
 
   let query = supabase
@@ -169,7 +169,7 @@ router.post('/add', async (req, res) => {
     const tokenNumber = tokenData || 1;
 
     // Count active tokens for THIS doctor to determine wait time
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
     let activeQuery = supabase
       .from('queue_tokens')
       .select('id')
@@ -206,12 +206,12 @@ router.post('/add', async (req, res) => {
     if (cleanPhone) {
       const { data: clinic } = await supabase
         .from('clinics')
-        .select('name, doctor_name')
+        .select('name')
         .eq('id', clinicId)
         .single();
 
       // Get doctor name if assigned
-      let doctorName = clinic?.doctor_name || req.clinic.name;
+      let doctorName = clinic?.name || '';
       if (assignedDoctorId) {
         const { data: dr } = await supabase
           .from('clinic_users')
@@ -249,7 +249,7 @@ router.post('/add', async (req, res) => {
 router.patch('/:tokenId/next', async (req, res) => {
   const clinicId = req.clinic.id;
   const { tokenId } = req.params;
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
 
   try {
     // Get current token to know its doctor
@@ -308,8 +308,8 @@ router.patch('/:tokenId/next', async (req, res) => {
     let waResult = { success: false };
     const patientPhone = nextToken.patients?.phone;
     if (patientPhone && patientPhone.trim()) {
-      // Get doctor name
-      let doctorName = req.clinic.doctor_name;
+      // Get doctor name from clinic_users
+      let doctorName = '';
       if (doctorId) {
         const { data: dr } = await supabase.from('clinic_users').select('name').eq('id', doctorId).single();
         if (dr) doctorName = dr.name;
