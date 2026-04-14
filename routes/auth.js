@@ -110,7 +110,7 @@ router.post('/login', [
       // ── Email login (admin) ──
       const { data } = await supabase
         .from('clinic_users')
-        .select(`*, clinics(id, name, clinic_code, rx_template, rx_color, doctor_name, phone, clinic_address, clinic_timings, rx_footer_note, doctor_qualification, doctor_registration)`)
+        .select(`*, clinics(id, name, clinic_code, rx_template, rx_color, phone, clinic_address, clinic_timings, rx_footer_note)`)
         .eq('email', email.trim())
         .eq('is_active', true)
         .single();
@@ -128,7 +128,7 @@ router.post('/login', [
       // Find clinic by code
       const { data: clinic } = await supabase
         .from('clinics')
-        .select('id, name, clinic_code, rx_template, rx_color, doctor_name, phone, clinic_address, clinic_timings, rx_footer_note, doctor_qualification, doctor_registration')
+        .select('id, name, clinic_code, rx_template, rx_color, phone, clinic_address, clinic_timings, rx_footer_note')
         .ilike('clinic_code', cleanCode)
         .single();
 
