@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { router: billingRouter, checkPatientLimit, incrementPatientCount } = require('./routes/billing');
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use('/api/patients', require('./routes/patients'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/consultations', require('./routes/consultations'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/billing', billingRouter);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'ClinicPing API' }));
 app.use((req, res) => res.status(404).json({ error: 'Route not found' }));

@@ -87,7 +87,7 @@ router.get('/doctors', async (req, res) => {
 });
 
 // ── POST /api/queue/add ──────────────────────────────────────────────────────
-router.post('/add', async (req, res) => {
+router.post('/add', checkPatientLimit, async (req, res) => {
   const clinicId = req.clinic.id;
   const { name, phone, reason, doctor_id } = req.body;
 
@@ -163,6 +163,8 @@ router.post('/add', async (req, res) => {
         patient = created;
       }
     }
+
+    await incrementPatientCount(clinicId);
 
     // Get next token — scoped to this doctor if assigned
     const { data: tokenData } = await supabase.rpc('get_next_token', { p_clinic_id: clinicId });
