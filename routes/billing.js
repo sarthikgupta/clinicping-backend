@@ -3,6 +3,7 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const supabase = require('../db/supabase');
 const { authMiddleware: auth } = require('../middleware/auth');
+const { checkPatientLimit, incrementPatientCount } = require('./planMiddleware');
 
 let razorpay;
 if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
@@ -71,52 +72,7 @@ async function getClinicPlan(clinicId) {
   return { ...PLANS[plan] || PLANS.free, patients_this_month: data.patients_this_month, patients_month_year: data.patients_month_year };
 }
 
-// ── Helper: reset monthly counter if new month ────────────────────────────────
-async function ensureMonthlyCounterFresh(clinicId) {
-  const currentMonthYear = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }).slice(0, 7); // YYYY-MM
 
-  const { data } = await supabase
-    .from('clinics')
-    .select('patients_month_year, patients_this_month')
-    .eq('id', clinicId)
-    .single();
-
-  if (data && data.patients_month_year !== currentMonthYear) {
-    await supabase
-      .from('clinics')
-      .update({ patients_this_month: 0, patients_month_year: currentMonthYear })
-      .eq('id', clinicId);
-    return 0;
-  }
-
-  return data?.patients_this_month || 0;
-}
-
-// ── Middleware: check patient limit before adding ─────────────────────────────
-async function checkPatientLimit(req, res, next) {
-  const clinicId = req.clinic?.id;
-  if (!clinicId) return next();
-
-  try {
-    const currentCount = await ensureMonthlyCounterFresh(clinicId);
-    const planData = await getClinicPlan(clinicId);
-
-    if (planData.patients_per_month !== Infinity && currentCount >= planData.patients_per_month) {
-      return res.status(403).json({
-        error: 'PLAN_LIMIT_REACHED',
-        message: `Free plan limit of ${planData.patients_per_month} patients/month reached.`,
-        current: currentCount,
-        limit: planData.patients_per_month,
-        upgrade_required: true,
-      });
-    }
-
-    next();
-  } catch (err) {
-    console.error('Plan check error:', err);
-    next(); // fail open — don't block on billing errors
-  }
-}
 
 // ── Middleware: check WhatsApp access ─────────────────────────────────────────
 async function checkWhatsAppAccess(req, res, next) {
@@ -135,24 +91,6 @@ async function checkWhatsAppAccess(req, res, next) {
   }
 }
 
-// ── Increment patient counter ─────────────────────────────────────────────────
-async function incrementPatientCount(clinicId) {
-  await supabase.rpc('increment_patient_count', { clinic_id_input: clinicId }).catch(() => {
-    // Fallback if RPC doesn't exist
-    supabase
-      .from('clinics')
-      .select('patients_this_month')
-      .eq('id', clinicId)
-      .single()
-      .then(({ data }) => {
-        supabase.from('clinics').update({
-          patients_this_month: (data?.patients_this_month || 0) + 1
-        }).eq('id', clinicId);
-      });
-  });
-}
-
-router.use(auth);
 
 // ── GET /api/billing/plan ─────────────────────────────────────────────────────
 router.get('/plan', async (req, res) => {
