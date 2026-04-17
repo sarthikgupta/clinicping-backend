@@ -94,7 +94,7 @@ async function checkWhatsAppAccess(req, res, next) {
 
 // ── GET /api/billing/plan ─────────────────────────────────────────────────────
 router.get('/plan', async (req, res) => {
-  const clinicId = req.clinic.id;
+  const clinicId = req.clinic?.id;
   try {
     const currentCount = await ensureMonthlyCounterFresh(clinicId);
     const planData = await getClinicPlan(clinicId);
