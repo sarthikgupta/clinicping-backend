@@ -94,6 +94,7 @@ async function checkWhatsAppAccess(req, res, next) {
 // ── GET /api/billing/plan ─────────────────────────────────────────────────────
 router.get('/plan', async (req, res) => {
   const clinicId = req.clinic?.id;
+  console.log('[Billing] clinic_id:', clinicId);
   try {
     const currentCount = await ensureMonthlyCounterFresh(clinicId);
     const planData = await getClinicPlan(clinicId);
@@ -240,7 +241,7 @@ router.post('/verify', async (req, res) => {
 // ── POST /api/billing/upi ─────────────────────────────────────────────────────
 // Generate UPI payment link
 router.post('/upi', async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
 
   const { plan_id } = req.body;
   const plan = PLANS[plan_id];
