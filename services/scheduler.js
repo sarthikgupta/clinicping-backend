@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const supabase = require('../db/supabase');
 const wa = require('./whatsapp');
+const { canSendWhatsAppType, getClinicPlanName } = require('../routes/planMiddleware');
 
 function startFollowUpScheduler() {
   cron.schedule('*/5 * * * *', async () => {
@@ -50,6 +51,21 @@ function startFollowUpScheduler() {
         const clinicPhone = clinic.phone || '';
         const clinicAddress = clinic.clinic_address || clinic.city || '';
         const clinicName = clinic.name || '';
+
+        // Check if this follow-up type is allowed on clinic's plan
+        const clinicPlan = await getClinicPlanName(clinic.id);
+        const waTypeMap = {
+          medicine: 'medicine_reminder',
+          appointment: 'appointment_reminder',
+          lab: 'lab_reminder',
+          wellness: 'wellness_check',
+        };
+        const waType = waTypeMap[fu.type];
+        if (waType && !canSendWhatsAppType(clinicPlan, waType)) {
+          console.log(`[Scheduler] Skipping ${fu.type} for ${patient.name} — not allowed on ${clinicPlan} plan`);
+          await supabase.from('followups').update({ status: 'failed' }).eq('id', fu.id);
+          continue;
+        }
 
         switch (fu.type) {
 

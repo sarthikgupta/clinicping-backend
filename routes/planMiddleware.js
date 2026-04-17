@@ -1,10 +1,57 @@
 const supabase = require('../db/supabase');
 
 const PLAN_LIMITS = {
-  free: { patients_per_month: 30, whatsapp: false, followups: false },
-  growth: { patients_per_month: Infinity, whatsapp: true, followups: true },
-  clinic: { patients_per_month: Infinity, whatsapp: true, followups: true },
+  free: {
+    patients_per_month: 30,
+    whatsapp: false,      // full whatsapp (reminders etc) blocked
+    followups: false,     // scheduled follow-ups blocked
+    analytics: 'basic',
+    // These 3 WhatsApp types are allowed even on free:
+    allowed_wa_types: ['token_assigned', 'call_in', 'prescription'],
+  },
+  growth: {
+    patients_per_month: Infinity,
+    whatsapp: true,
+    followups: true,
+    analytics: 'full',
+    allowed_wa_types: ['token_assigned', 'call_in', 'prescription', 'medicine_reminder', 'appointment_reminder', 'lab_reminder', 'wellness_check'],
+  },
+  clinic: {
+    patients_per_month: Infinity,
+    whatsapp: true,
+    followups: true,
+    analytics: 'full',
+    allowed_wa_types: ['token_assigned', 'call_in', 'prescription', 'medicine_reminder', 'appointment_reminder', 'lab_reminder', 'wellness_check'],
+  },
 };
+
+// Check if a specific WhatsApp message type is allowed for a plan
+function canSendWhatsAppType(plan, type) {
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+  return limits.allowed_wa_types.includes(type);
+}
+
+// Get clinic plan from DB
+async function getClinicPlanName(clinicId) {
+  const { data } = await supabase
+    .from('clinics')
+    .select('plan, plan_expires_at')
+    .eq('id', clinicId)
+    .single();
+
+  let plan = data?.plan || 'free';
+
+  // Check expiry
+  if (plan !== 'free' && data?.plan_expires_at) {
+    if (new Date(data.plan_expires_at) < new Date()) {
+      plan = 'free';
+      await supabase.from('clinics')
+        .update({ plan: 'free', plan_expires_at: null })
+        .eq('id', clinicId);
+    }
+  }
+  return plan;
+}
 
 async function ensureMonthlyCounterFresh(clinicId) {
   const currentMonthYear = new Date()
@@ -88,4 +135,4 @@ async function incrementPatientCount(clinicId) {
   }
 }
 
-module.exports = { checkPatientLimit, incrementPatientCount,ensureMonthlyCounterFresh };
+module.exports = { checkPatientLimit, incrementPatientCount, ensureMonthlyCounterFresh, canSendWhatsAppType, getClinicPlanName, PLAN_LIMITS };
