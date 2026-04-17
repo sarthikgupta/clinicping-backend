@@ -3,7 +3,7 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const supabase = require('../db/supabase');
 const { authMiddleware: auth } = require('../middleware/auth');
-const { checkPatientLimit, incrementPatientCount } = require('./planMiddleware');
+const { checkPatientLimit, incrementPatientCount } = require('planMiddleware');
 
 let razorpay;
 if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
