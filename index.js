@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { router: billingRouter, checkPatientLimit, incrementPatientCount } = require('./routes/billing');
+const { router: billingRouter } = require('./routes/billing');
 
 const app = express();
 

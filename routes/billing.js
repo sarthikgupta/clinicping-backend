@@ -48,6 +48,9 @@ const PLANS = {
   },
 };
 
+// Apply auth middleware to all routes
+router.use(auth);
+
 // ── Helper: get current plan for a clinic ────────────────────────────────────
 async function getClinicPlan(clinicId) {
   const { data } = await supabase
@@ -94,10 +97,11 @@ async function checkWhatsAppAccess(req, res, next) {
 // ── GET /api/billing/plan ─────────────────────────────────────────────────────
 router.get('/plan', async (req, res) => {
   const clinicId = req.clinic?.id;
-  console.log('[Billing] clinic_id:', clinicId);
+  
   try {
     const currentCount = await ensureMonthlyCounterFresh(clinicId);
     const planData = await getClinicPlan(clinicId);
+
 
     const { data: clinic } = await supabase
       .from('clinics')
