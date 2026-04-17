@@ -88,4 +88,4 @@ async function incrementPatientCount(clinicId) {
   }
 }
 
-module.exports = { checkPatientLimit, incrementPatientCount };
+module.exports = { checkPatientLimit, incrementPatientCount,ensureMonthlyCounterFresh };
