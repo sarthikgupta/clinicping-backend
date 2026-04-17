@@ -2,7 +2,7 @@ const router = require('express').Router();
 const supabase = require('../db/supabase');
 const wa = require('../services/whatsapp');
 const { authMiddleware: auth } = require('../middleware/auth');
-const { checkPatientLimit, incrementPatientCount } = require('./planMiddleware');
+const { checkPatientLimit, incrementPatientCount } = require('./billing');
 
 router.use(auth);
 
