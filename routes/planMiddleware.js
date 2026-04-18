@@ -3,10 +3,10 @@ const supabase = require('../db/supabase');
 const PLAN_LIMITS = {
   free: {
     patients_per_month: 30,
-    whatsapp: false,      // full whatsapp (reminders etc) blocked
-    followups: false,     // scheduled follow-ups blocked
+    whatsapp: false,
+    followups: false,
     analytics: 'basic',
-    // These 3 WhatsApp types are allowed even on free:
+    max_doctors: 1,
     allowed_wa_types: ['token_assigned', 'call_in', 'prescription'],
   },
   growth: {
@@ -14,6 +14,7 @@ const PLAN_LIMITS = {
     whatsapp: true,
     followups: true,
     analytics: 'full',
+    max_doctors: 1,
     allowed_wa_types: ['token_assigned', 'call_in', 'prescription', 'medicine_reminder', 'appointment_reminder', 'lab_reminder', 'wellness_check'],
   },
   clinic: {
@@ -21,6 +22,7 @@ const PLAN_LIMITS = {
     whatsapp: true,
     followups: true,
     analytics: 'full',
+    max_doctors: 3,
     allowed_wa_types: ['token_assigned', 'call_in', 'prescription', 'medicine_reminder', 'appointment_reminder', 'lab_reminder', 'wellness_check'],
   },
 };
