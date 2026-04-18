@@ -177,26 +177,6 @@ router.post('/users', async (req, res) => {
   if (decoded.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
 
   const { name, username, email, password, role, qualification, registration_no, speciality } = req.body;
-
-  // ── Doctor limit check ────────────────────────────────────────────────────
-  if (role === 'doctor') {
-    const plan = await getClinicPlanName(decoded.clinic_id);
-    const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
-    const { data: existingDoctors } = await supabase
-      .from('clinic_users')
-      .select('id')
-      .eq('clinic_id', decoded.clinic_id)
-      .eq('role', 'doctor')
-      .eq('is_active', true);
-    const doctorCount = existingDoctors?.length || 0;
-    if (doctorCount >= limits.max_doctors) {
-      return res.status(403).json({
-        error: 'DOCTOR_LIMIT_REACHED',
-        message: `Your ${plan} plan allows max ${limits.max_doctors} doctor${limits.max_doctors > 1 ? 's' : ''}. Upgrade to add more.`,
-        upgrade_required: true,
-      });
-    }
-  }
   if (!name || !username || !password || !role) {
     return res.status(400).json({ error: 'name, username, password, role required' });
   }
@@ -205,6 +185,26 @@ router.post('/users', async (req, res) => {
   }
 
   try {
+    // ── Doctor limit check ──────────────────────────────────────────────────
+    if (role === 'doctor') {
+      const plan = await getClinicPlanName(decoded.clinic_id);
+      const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+      const { data: existingDoctors } = await supabase
+        .from('clinic_users')
+        .select('id')
+        .eq('clinic_id', decoded.clinic_id)
+        .eq('role', 'doctor')
+        .eq('is_active', true);
+      const doctorCount = existingDoctors?.length || 0;
+      if (doctorCount >= limits.max_doctors) {
+        return res.status(403).json({
+          error: 'DOCTOR_LIMIT_REACHED',
+          message: `Your ${plan} plan allows max ${limits.max_doctors} doctor${limits.max_doctors > 1 ? 's' : ''}. Upgrade to add more.`,
+          upgrade_required: true,
+        });
+      }
+    }
+
     // Username unique within clinic
     const { data: existingU } = await supabase
       .from('clinic_users').select('id')
