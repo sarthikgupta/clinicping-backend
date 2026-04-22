@@ -61,6 +61,58 @@ router.post('/webhook', async (req, res) => {
 
   if (signature !== expectedSignature) {
     return res.status(400).json({ error: 'Invalid signature' });
+  }
+
+  const { event, payload } = req.body;
+
+  try {
+    if (event === 'subscription.charged') {
+      const sub = payload.subscription.entity;
+      const payment = payload.payment.entity;
+      const clinicId = sub.notes?.clinic_id;
+      const planId = sub.notes?.plan;
+
+      if (clinicId && planId) {
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 31);
+
+        await supabase.from('clinics').update({
+          plan: planId,
+          plan_expires_at: expiresAt.toISOString(),
+        }).eq('id', clinicId);
+
+        await supabase.from('payments').insert({
+          clinic_id: clinicId,
+          razorpay_payment_id: payment.id,
+          razorpay_subscription_id: sub.id,
+          amount: payment.amount,
+          plan: planId,
+          status: 'captured',
+        });
+
+        console.log(`[Billing] Plan renewed: ${clinicId} → ${planId}`);
+      }
+    }
+
+    if (event === 'subscription.cancelled' || event === 'subscription.expired') {
+      const sub = payload.subscription.entity;
+      const clinicId = sub.notes?.clinic_id;
+      if (clinicId) {
+        await supabase.from('clinics').update({
+          plan: 'free',
+          plan_expires_at: null,
+          razorpay_subscription_id: null,
+        }).eq('id', clinicId);
+        console.log(`[Billing] Plan cancelled: ${clinicId}`);
+      }
+    }
+
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('Webhook error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Apply auth middleware to all routes
 router.use(auth);
@@ -292,57 +344,5 @@ router.post('/upi', async (req, res) => {
   }
 });
 
-  }
-
-  const { event, payload } = req.body;
-
-  try {
-    if (event === 'subscription.charged') {
-      const sub = payload.subscription.entity;
-      const payment = payload.payment.entity;
-      const clinicId = sub.notes?.clinic_id;
-      const planId = sub.notes?.plan;
-
-      if (clinicId && planId) {
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 31);
-
-        await supabase.from('clinics').update({
-          plan: planId,
-          plan_expires_at: expiresAt.toISOString(),
-        }).eq('id', clinicId);
-
-        await supabase.from('payments').insert({
-          clinic_id: clinicId,
-          razorpay_payment_id: payment.id,
-          razorpay_subscription_id: sub.id,
-          amount: payment.amount,
-          plan: planId,
-          status: 'captured',
-        });
-
-        console.log(`[Billing] Plan renewed: ${clinicId} → ${planId}`);
-      }
-    }
-
-    if (event === 'subscription.cancelled' || event === 'subscription.expired') {
-      const sub = payload.subscription.entity;
-      const clinicId = sub.notes?.clinic_id;
-      if (clinicId) {
-        await supabase.from('clinics').update({
-          plan: 'free',
-          plan_expires_at: null,
-          razorpay_subscription_id: null,
-        }).eq('id', clinicId);
-        console.log(`[Billing] Plan cancelled: ${clinicId}`);
-      }
-    }
-
-    res.json({ status: 'ok' });
-  } catch (err) {
-    console.error('Webhook error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 module.exports = { router, checkPatientLimit, checkWhatsAppAccess, incrementPatientCount, getClinicPlan, PLANS };
