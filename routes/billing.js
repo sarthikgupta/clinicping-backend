@@ -48,6 +48,20 @@ const PLANS = {
   },
 };
 
+// ── POST /api/billing/webhook ─────────────────────────────────────────────────
+// Razorpay webhook for subscription events
+router.post('/webhook', async (req, res) => {
+  const signature = req.headers['x-razorpay-signature'];
+  const body = JSON.stringify(req.body);
+
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+    .update(body)
+    .digest('hex');
+
+  if (signature !== expectedSignature) {
+    return res.status(400).json({ error: 'Invalid signature' });
+
 // Apply auth middleware to all routes
 router.use(auth);
 
@@ -278,53 +292,11 @@ router.post('/upi', async (req, res) => {
   }
 });
 
-// ── POST /api/billing/webhook ─────────────────────────────────────────────────
-// Razorpay webhook for subscription events
-router.post('/webhook', async (req, res) => {
-  const signature = req.headers['x-razorpay-signature'];
-  const body = JSON.stringify(req.body);
-
-  const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
-    .update(body)
-    .digest('hex');
-
-  if (signature !== expectedSignature) {
-    return res.status(400).json({ error: 'Invalid signature' });
   }
 
   const { event, payload } = req.body;
 
   try {
-    // ── One-time payment link paid ────────────────────────────────────────────
-    if (event === 'payment_link.paid') {
-      const pl = payload.payment_link.entity;
-      const clinicId = pl.notes?.clinic_id;
-      const planId = pl.notes?.plan;
-      const paymentId = pl.payments?.[0]?.payment_id || null;
-
-      if (clinicId && planId) {
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 31);
-
-        await supabase.from('clinics').update({
-          plan: planId,
-          plan_expires_at: expiresAt.toISOString(),
-        }).eq('id', clinicId);
-
-        await supabase.from('payments').insert({
-          clinic_id: clinicId,
-          razorpay_payment_id: paymentId,
-          amount: pl.amount,
-          plan: planId,
-          status: 'captured',
-        });
-
-        console.log(`[Billing] One-time payment: ${clinicId} → ${planId}`);
-      }
-    }
-
-    // ── Subscription monthly renewal ──────────────────────────────────────────
     if (event === 'subscription.charged') {
       const sub = payload.subscription.entity;
       const payment = payload.payment.entity;
@@ -349,12 +321,11 @@ router.post('/webhook', async (req, res) => {
           status: 'captured',
         });
 
-        console.log(`[Billing] Subscription renewed: ${clinicId} → ${planId}`);
+        console.log(`[Billing] Plan renewed: ${clinicId} → ${planId}`);
       }
     }
 
-    // ── Subscription cancelled ────────────────────────────────────────────────
-    if (event === 'subscription.cancelled') {
+    if (event === 'subscription.cancelled' || event === 'subscription.expired') {
       const sub = payload.subscription.entity;
       const clinicId = sub.notes?.clinic_id;
       if (clinicId) {
@@ -363,23 +334,7 @@ router.post('/webhook', async (req, res) => {
           plan_expires_at: null,
           razorpay_subscription_id: null,
         }).eq('id', clinicId);
-        console.log(`[Billing] Subscription cancelled: ${clinicId}`);
-      }
-    }
-
-    // ── Payment failed — log only, don't downgrade immediately ───────────────
-    if (event === 'payment.failed') {
-      const payment = payload.payment.entity;
-      const clinicId = payment.notes?.clinic_id;
-      if (clinicId) {
-        console.log(`[Billing] Payment failed for clinic: ${clinicId}`);
-        await supabase.from('payments').insert({
-          clinic_id: clinicId,
-          razorpay_payment_id: payment.id,
-          amount: payment.amount || 0,
-          plan: payment.notes?.plan || 'unknown',
-          status: 'failed',
-        }).catch(() => {});
+        console.log(`[Billing] Plan cancelled: ${clinicId}`);
       }
     }
 
