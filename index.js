@@ -10,6 +10,9 @@ app.use(cors({
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
 }));
+
+// Raw body for Razorpay webhook signature verification
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 app.use('/api/auth', require('./routes/auth'));
