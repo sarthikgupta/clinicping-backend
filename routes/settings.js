@@ -2,7 +2,6 @@ const router = require('express').Router();
 const supabase = require('../db/supabase');
 const bcrypt = require('bcryptjs');
 const { authMiddleware: auth } = require('../middleware/auth');
-const { getClinicPlanName, PLAN_LIMITS } = require('./planMiddleware');
 
 router.use(auth);
 
@@ -10,7 +9,7 @@ router.use(auth);
 router.get('/', async (req, res) => {
   const { data, error } = await supabase
     .from('clinics')
-    .select('name, phone, email, city, clinic_address, clinic_timings, rx_template, rx_color, rx_footer_note, clinic_code')
+    .select('name, phone, email, city, clinic_address, clinic_timings, rx_template, rx_color, rx_footer_note, clinic_code, avg_consult_minutes')
     .eq('id', req.clinic.id)
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -21,7 +20,7 @@ router.get('/', async (req, res) => {
 router.patch('/', async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
 
-  const allowed = ['name', 'phone', 'city', 'clinic_address', 'clinic_timings', 'rx_template', 'rx_color', 'rx_footer_note'];
+  const allowed = ['name', 'phone', 'city', 'clinic_address', 'clinic_timings', 'rx_template', 'rx_color', 'rx_footer_note', 'avg_consult_minutes'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 
@@ -42,7 +41,7 @@ router.patch('/', async (req, res) => {
 
   const { data, error } = await supabase
     .from('clinics').update(updates).eq('id', req.clinic.id)
-    .select('name, phone, email, city, clinic_address, clinic_timings, rx_template, rx_color, rx_footer_note, clinic_code')
+    .select('name, phone, email, city, clinic_address, clinic_timings, rx_template, rx_color, rx_footer_note, clinic_code, avg_consult_minutes')
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
@@ -154,91 +153,6 @@ router.post('/users/:id/reset-password', async (req, res) => {
       .eq('id', req.params.id).eq('clinic_id', req.clinic.id);
     res.json({ message: 'Password reset' });
   } catch { res.status(500).json({ error: 'Failed' }); }
-});
-
-// ── GET /api/settings/users ───────────────────────────────────────────────────
-router.get('/users', async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-  const { data, error } = await supabase
-    .from('clinic_users')
-    .select('id, name, email, username, role, qualification, registration_no, speciality, is_active')
-    .eq('clinic_id', req.clinic.id)
-    .order('role').order('name');
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-// ── POST /api/settings/users ──────────────────────────────────────────────────
-router.post('/users', async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-
-  const { name, email, username, password, role, qualification, registration_no, speciality } = req.body;
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' });
-  if (!password || password.length < 6) return res.status(400).json({ error: 'Password min 6 characters' });
-  if (!role || !['doctor', 'receptionist'].includes(role)) return res.status(400).json({ error: 'Valid role required' });
-
-  try {
-    // ── Doctor limit check ──────────────────────────────────────────────────
-    if (role === 'doctor') {
-      const plan = await getClinicPlanName(req.clinic.id);
-      const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
-
-      const { data: existingDoctors } = await supabase
-        .from('clinic_users')
-        .select('id')
-        .eq('clinic_id', req.clinic.id)
-        .eq('role', 'doctor')
-        .eq('is_active', true);
-
-      const doctorCount = existingDoctors?.length || 0;
-
-      if (doctorCount >= limits.max_doctors) {
-        return res.status(403).json({
-          error: 'DOCTOR_LIMIT_REACHED',
-          message: `Your ${plan} plan allows max ${limits.max_doctors} doctor${limits.max_doctors > 1 ? 's' : ''}. Upgrade to add more.`,
-          current: doctorCount,
-          limit: limits.max_doctors,
-          upgrade_required: true,
-        });
-      }
-    }
-
-    // ── Username uniqueness check ───────────────────────────────────────────
-    if (username) {
-      if (!/^[a-z0-9_.]{3,20}$/.test(username)) {
-        return res.status(400).json({ error: 'Username: 3-20 chars, lowercase/numbers/._  only' });
-      }
-      const { data: existing } = await supabase
-        .from('clinic_users').select('id')
-        .eq('clinic_id', req.clinic.id).eq('username', username).single();
-      if (existing) return res.status(409).json({ error: 'Username already taken in this clinic' });
-    }
-
-    const password_hash = await bcrypt.hash(password, 12);
-
-    const { data, error } = await supabase
-      .from('clinic_users')
-      .insert({
-        clinic_id: req.clinic.id,
-        name: name.trim(),
-        email: email || null,
-        username: username || null,
-        password_hash,
-        role,
-        qualification: qualification || '',
-        registration_no: registration_no || '',
-        speciality: speciality || '',
-        is_active: true,
-      })
-      .select('id, name, email, username, role, qualification, registration_no, speciality, is_active')
-      .single();
-
-    if (error) throw error;
-    res.status(201).json(data);
-  } catch (err) {
-    console.error('Add user error:', err);
-    res.status(500).json({ error: err.message });
-  }
 });
 
 module.exports = router;

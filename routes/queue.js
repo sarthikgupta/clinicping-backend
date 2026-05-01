@@ -2,7 +2,7 @@ const router = require('express').Router();
 const supabase = require('../db/supabase');
 const wa = require('../services/whatsapp');
 const { authMiddleware: auth } = require('../middleware/auth');
-const { checkPatientLimit, incrementPatientCount } = require('./billing');
+const { checkPatientLimit, incrementPatientCount } = require('./planMiddleware');
 
 router.use(auth);
 
@@ -186,7 +186,15 @@ router.post('/add', checkPatientLimit, async (req, res) => {
 
     const { data: activeTokens } = await activeQuery;
     const activeCount = activeTokens?.length || 0;
-    const waitMinutes = wa.estimateWaitTime(activeCount);
+
+    // Use clinic's avg_consult_minutes setting (default 10)
+    const { data: clinicSettings } = await supabase
+      .from('clinics')
+      .select('avg_consult_minutes')
+      .eq('id', clinicId)
+      .single();
+    const avgMinutes = clinicSettings?.avg_consult_minutes || 10;
+    const waitMinutes = wa.estimateWaitTime(activeCount, avgMinutes);
     const initialStatus = activeCount === 0 ? 'consulting' : 'waiting';
 
     const { data: token, error: tErr } = await supabase

@@ -37,7 +37,8 @@ router.get('/today', async (req, res) => {
         .from('consultations')
         .select(`id, visit_date, symptoms, diagnosis, next_appointment_date,
           medicines(name, dose, duration, sort_order),
-          tests_ordered(name, sort_order)`)
+          tests_ordered(name, sort_order),
+          treatments(name, duration, notes, sort_order)`)
         .eq('clinic_id', clinicId)
         .eq('patient_id', patientId)
         .lt('visit_date', today)
@@ -48,7 +49,8 @@ router.get('/today', async (req, res) => {
         .from('consultations')
         .select(`id, symptoms, diagnosis, next_appointment_date, next_appointment_time, next_appointment_note,
           medicines(id, name, dose, duration, sort_order),
-          tests_ordered(id, name, sort_order)`)
+          tests_ordered(id, name, sort_order),
+          treatments(id, name, duration, notes, sort_order)`)
         .eq('clinic_id', clinicId)
         .eq('patient_id', patientId)
         .eq('visit_date', today)
@@ -96,7 +98,8 @@ router.post('/', async (req, res) => {
     symptoms, diagnosis,
     medicines, tests,
     next_appointment_date, next_appointment_time, next_appointment_note,
-    send_whatsapp_slip, // NEW: boolean flag from frontend
+    treatments,
+    send_whatsapp_slip,
   } = req.body;
 
   if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
@@ -131,6 +134,7 @@ router.post('/', async (req, res) => {
 
       await supabase.from('medicines').delete().eq('consultation_id', consultationId);
       await supabase.from('tests_ordered').delete().eq('consultation_id', consultationId);
+      await supabase.from('treatments').delete().eq('consultation_id', consultationId);
     } else {
       const { data: created, error: cErr } = await supabase
         .from('consultations')
@@ -177,9 +181,24 @@ router.post('/', async (req, res) => {
       if (testRows.length > 0) await supabase.from('tests_ordered').insert(testRows);
     }
 
+    // Save treatments
+    if (treatments && treatments.length > 0) {
+      const treatmentRows = treatments
+        .filter(t => t.name && t.name.trim())
+        .map((t, i) => ({
+          consultation_id: consultationId,
+          clinic_id: clinicId,
+          name: t.name.trim(),
+          duration: t.duration || '',
+          notes: t.notes || '',
+          sort_order: i,
+        }));
+      if (treatmentRows.length > 0) await supabase.from('treatments').insert(treatmentRows);
+    }
+
     // Schedule follow-up for next appointment
     if (next_appointment_date) {
-      const scheduledAt = `${next_appointment_date}T09:00:00+05:30`;
+      const scheduledAt = new Date(`${next_appointment_date}T09:00:00`).toISOString();
       await supabase.from('followups').insert({
         clinic_id: clinicId,
         patient_id,
@@ -201,30 +220,12 @@ router.post('/', async (req, res) => {
           .eq('id', patient_id)
           .single();
 
-        // Get clinic info for phone
+        // Get clinic info for doctor name and phone
         const { data: clinicInfo } = await supabase
           .from('clinics')
-          .select('phone')
+          .select('doctor_name, phone, doctor_qualification')
           .eq('id', clinicId)
           .single();
-
-        // Get actual treating doctor from clinic_users
-        let doctorName = 'Doctor';
-        if (token_id) {
-          const { data: token } = await supabase
-            .from('queue_tokens')
-            .select('doctor_id')
-            .eq('id', token_id)
-            .single();
-          if (token?.doctor_id) {
-            const { data: doctor } = await supabase
-              .from('clinic_users')
-              .select('name')
-              .eq('id', token.doctor_id)
-              .single();
-            if (doctor?.name) doctorName = doctor.name;
-          }
-        }
 
         if (patient?.phone && patient.phone.trim()) {
           const consultationData = {
@@ -240,7 +241,7 @@ router.post('/', async (req, res) => {
           const result = await wa.sendPrescription({
             patient,
             consultation: consultationData,
-            doctorName,
+            doctorName: clinicInfo?.doctor_name || 'Doctor',
             clinicPhone: clinicInfo?.phone || '',
             clinicId,
           });
@@ -258,7 +259,8 @@ router.post('/', async (req, res) => {
       .select(`id, visit_date, symptoms, diagnosis,
         next_appointment_date, next_appointment_time, next_appointment_note,
         medicines(name, dose, duration, sort_order),
-        tests_ordered(name, sort_order)`)
+        tests_ordered(name, sort_order),
+        treatments(name, duration, notes, sort_order)`)
       .eq('id', consultationId)
       .single();
 
@@ -266,7 +268,7 @@ router.post('/', async (req, res) => {
     // Update patient's last_visit date
     await supabase
     .from('patients')
-    .update({ last_visit: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) })
+    .update({ last_visit: new Date().toISOString().split('T')[0] })
     .eq('id', patient_id);
 
     res.status(201).json({ ...saved, whatsappSlipSent });
