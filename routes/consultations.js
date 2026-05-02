@@ -238,10 +238,26 @@ router.post('/', async (req, res) => {
             next_appointment_note,
           };
 
+          // Get doctor name - from assigned doctor or admin fallback
+          let doctorName = 'Doctor';
+          if (token_id) {
+            const { data: tk } = await supabase.from('queue_tokens').select('doctor_id').eq('id', token_id).single();
+            if (tk?.doctor_id) {
+              const { data: dr } = await supabase.from('clinic_users').select('name').eq('id', tk.doctor_id).single();
+              if (dr?.name) doctorName = dr.name;
+            } else {
+              const { data: admin } = await supabase.from('clinic_users').select('name').eq('clinic_id', clinicId).eq('role', 'admin').single();
+              if (admin?.name) doctorName = admin.name;
+            }
+          } else {
+            const { data: admin } = await supabase.from('clinic_users').select('name').eq('clinic_id', clinicId).eq('role', 'admin').single();
+            if (admin?.name) doctorName = admin.name;
+          }
+
           const result = await wa.sendPrescription({
             patient,
             consultation: consultationData,
-            doctorName: 'Doctor',
+            doctorName,
             clinicPhone: clinicInfo?.phone || '',
             clinicId,
           });
