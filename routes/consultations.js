@@ -223,7 +223,7 @@ router.post('/', async (req, res) => {
         // Get clinic info for doctor name and phone
         const { data: clinicInfo } = await supabase
           .from('clinics')
-          .select('doctor_name, phone, doctor_qualification')
+          .select('phone')
           .eq('id', clinicId)
           .single();
 
@@ -241,7 +241,7 @@ router.post('/', async (req, res) => {
           const result = await wa.sendPrescription({
             patient,
             consultation: consultationData,
-            doctorName: clinicInfo?.doctor_name || 'Doctor',
+            doctorName: 'Doctor',
             clinicPhone: clinicInfo?.phone || '',
             clinicId,
           });
