@@ -337,6 +337,35 @@ router.patch('/:tokenId/next', async (req, res) => {
       }
     }
 
+    // Send heads-up to patient 2 positions ahead (so they can start travelling)
+    try {
+      let aheadQuery = supabase
+        .from('queue_tokens')
+        .select('*, patients(id, name, phone)')
+        .eq('clinic_id', clinicId)
+        .eq('queue_date', today)
+        .eq('status', 'waiting')
+        .order('token_number', { ascending: true })
+        .limit(2);
+      if (doctorId) aheadQuery = aheadQuery.eq('doctor_id', doctorId);
+
+      const { data: aheadTokens } = await aheadQuery;
+
+      // Patient 2 ahead = index 1 (index 0 is the immediate next)
+      const twoAheadToken = aheadTokens?.[1];
+      if (twoAheadToken?.patients?.phone && !twoAheadToken.called_in_sent) {
+        await wa.sendCallIn({
+          patient: twoAheadToken.patients,
+          doctorName,
+          clinicId,
+        });
+        await supabase.from('queue_tokens').update({ called_in_sent: true }).eq('id', twoAheadToken.id);
+        console.log(`[Queue] Heads-up sent to 2-ahead patient: ${twoAheadToken.patients.name}`);
+      }
+    } catch (aheadErr) {
+      console.error('[Queue] Heads-up send error:', aheadErr.message);
+    }
+
     res.json({
       nextPatient: { ...nextToken, status: 'consulting' },
       whatsappSent: waResult.success,
