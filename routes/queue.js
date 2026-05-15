@@ -315,30 +315,20 @@ router.patch('/:tokenId/next', async (req, res) => {
       .eq('id', nextToken.id)
       .eq('clinic_id', clinicId);
 
-    // Send WhatsApp call-in
+    // Send WhatsApp call-in to patient 2 positions ahead (not to the next patient)
     let waResult = { success: false };
-    const patientPhone = nextToken.patients?.phone;
-    if (patientPhone && patientPhone.trim()) {
-      // Get doctor name from clinic_users
+    try {
+      // Get doctor name
       let doctorName = '';
       if (doctorId) {
         const { data: dr } = await supabase.from('clinic_users').select('name').eq('id', doctorId).single();
         if (dr) doctorName = dr.name;
+      } else {
+        const { data: admin } = await supabase.from('clinic_users').select('name').eq('clinic_id', clinicId).eq('role', 'admin').single();
+        if (admin) doctorName = admin.name;
       }
 
-      waResult = await wa.sendCallIn({
-        patient: nextToken.patients,
-        doctorName,
-        clinicId,
-      });
-
-      if (waResult.success) {
-        await supabase.from('queue_tokens').update({ called_in_sent: true }).eq('id', nextToken.id);
-      }
-    }
-
-    // Send heads-up to patient 2 positions ahead (so they can start travelling)
-    try {
+      // Fetch 2 waiting patients ahead
       let aheadQuery = supabase
         .from('queue_tokens')
         .select('*, patients(id, name, phone)')
@@ -351,19 +341,21 @@ router.patch('/:tokenId/next', async (req, res) => {
 
       const { data: aheadTokens } = await aheadQuery;
 
-      // Patient 2 ahead = index 1 (index 0 is the immediate next)
+      // Send call-in to 2nd in line (index 1), not 1st
       const twoAheadToken = aheadTokens?.[1];
-      if (twoAheadToken?.patients?.phone && !twoAheadToken.called_in_sent) {
-        await wa.sendCallIn({
+      if (twoAheadToken?.patients?.phone && twoAheadToken.patients.phone.trim() && !twoAheadToken.called_in_sent) {
+        waResult = await wa.sendCallIn({
           patient: twoAheadToken.patients,
           doctorName,
           clinicId,
         });
-        await supabase.from('queue_tokens').update({ called_in_sent: true }).eq('id', twoAheadToken.id);
-        console.log(`[Queue] Heads-up sent to 2-ahead patient: ${twoAheadToken.patients.name}`);
+        if (waResult.success) {
+          await supabase.from('queue_tokens').update({ called_in_sent: true }).eq('id', twoAheadToken.id);
+          console.log(`[Queue] Call-in sent to 2-ahead: ${twoAheadToken.patients.name}`);
+        }
       }
     } catch (aheadErr) {
-      console.error('[Queue] Heads-up send error:', aheadErr.message);
+      console.error('[Queue] Call-in error:', aheadErr.message);
     }
 
     res.json({
